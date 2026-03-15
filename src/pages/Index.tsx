@@ -30,7 +30,7 @@ const parseMonth = (m: any) => {
 };
 
 const App = () => {
-  // Сохранение выбранного месяца в памяти браузера (уникальный ключ для ПЛ ГРУПП)
+  // Сохранение выбранного месяца в памяти браузера
   const [selectedMonth, setSelectedMonth] = useState<string | null>(() => {
     return localStorage.getItem('pl_group_dashboard_state_v1') || "Март";
   });
@@ -45,7 +45,7 @@ const App = () => {
     }
   }, [selectedMonth]);
 
-  // Маппинг данных из JSON (только необходимые поля для ПЛ ГРУПП)
+  // Маппинг данных из JSON
   const allData = useMemo(() => {
     if (!Array.isArray(productionData)) return [];
     return productionData.map((r) => {
@@ -91,7 +91,7 @@ const App = () => {
       diffRev: 0, diffProd: 0
     };
 
-    // Сравнение с прошлым годом (2025)
+    // Сравнение с прошлым годом
     if (!isAll && currentSet.length > 0) {
       const prev = data2025.find(r => r.monthIdx === currentSet[0].monthIdx);
       if (prev) {
@@ -101,7 +101,7 @@ const App = () => {
       }
     }
 
-    // Агрегация лидеров (топы)
+    // Агрегация лидеров
     const aggregate = (type: 'topRev' | 'topQty') => {
       const map: Record<string, number> = {};
       currentSet.forEach(r => (r[type] as any[]).forEach(t => map[t.n] = (map[t.n] || 0) + t.v));
@@ -115,7 +115,7 @@ const App = () => {
   const fN = (n: number) => new Intl.NumberFormat("ru-RU").format(Math.round(n));
   const fR = (n: number) => n >= 1000000 ? (n/1000000).toFixed(2) + " млн ₽" : fN(n) + " ₽";
 
-  // Стилизация ПЛ ГРУПП: Синий основной, четкие рамки
+  // Стилизация: Синий основной, четкие рамки
   const bluePrimary = '#1e3a8a'; 
   const sharpBorder = `2px solid ${bluePrimary}`;
 
@@ -129,16 +129,36 @@ const App = () => {
         borderRadius: '0px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ 
-            background: bluePrimary, color: 'white', padding: '12px 20px', 
-            fontWeight: '950', fontSize: '28px', border: '1px solid #000' 
-          }}>PL</div>
-          <div>
-            <h1 style={{ fontSize: '28px', fontWeight: '950', margin: 0, color: bluePrimary, textTransform: 'uppercase', letterSpacing: '2px' }}>
-              Производство ПЛ ГРУПП
-            </h1>
-            <div style={{ fontSize: '13px', color: '#3b82f6', fontWeight: '900', marginTop: '4px', letterSpacing: '1px' }}>
-              МОНИТОРИНГ ПОКАЗАТЕЛЕЙ 2026 | ОБНОВЛЕНО: {lastUpdate}
+          {/* ЛОГОТИП И ТИТРЫ */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <img 
+              src="/logo.png" 
+              alt="PL Group" 
+              style={{ height: '50px', objectFit: 'contain' }}
+              onError={(e) => {
+                // Фолбек если картинка не найдена
+                e.currentTarget.style.display = 'none';
+                const parent = e.currentTarget.parentElement;
+                if (parent) {
+                  const placeholder = document.createElement('div');
+                  placeholder.innerText = 'PL';
+                  placeholder.style.background = bluePrimary;
+                  placeholder.style.color = 'white';
+                  placeholder.style.padding = '10px 15px';
+                  placeholder.style.fontWeight = '900';
+                  placeholder.style.fontSize = '20px';
+                  placeholder.style.border = '1px solid #000';
+                  parent.prepend(placeholder);
+                }
+              }}
+            />
+            <div>
+              <h1 style={{ fontSize: '28px', fontWeight: '950', margin: 0, color: bluePrimary, textTransform: 'uppercase', letterSpacing: '2px' }}>
+                Производство ПЛ ГРУПП
+              </h1>
+              <div style={{ fontSize: '13px', color: '#3b82f6', fontWeight: '900', marginTop: '4px', letterSpacing: '1px' }}>
+                МОНИТОРИНГ ПОКАЗАТЕЛЕЙ 2026 | ОБНОВЛЕНО: {lastUpdate}
+              </div>
             </div>
           </div>
         </div>
@@ -173,7 +193,7 @@ const App = () => {
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
           
-          {/* ОСНОВНЫЕ КАРТОЧКИ KPI */}
+          {/* КАРТОЧКИ ПЕРИОДА */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
             {[
               { t: 'ВЫПУСК (ТЕКУЩИЙ ПЕРИОД)', v: fN(m.prod) + ' ШТ', d: m.diffProd, i: <Factory size={28}/> },
@@ -194,7 +214,7 @@ const App = () => {
             ))}
           </div>
 
-          {/* ТАБЛИЦА ДИНАМИКИ */}
+          {/* ТАБЛИЦА */}
           <div style={{ background: 'white', padding: '0', border: sharpBorder, overflow: 'hidden' }}>
             <div style={{ padding: '20px 30px', background: '#f8fafc', borderBottom: sharpBorder, display: 'flex', alignItems: 'center', gap: '12px' }}>
               <Activity size={24} strokeWidth={3} color={bluePrimary} />
@@ -224,7 +244,7 @@ const App = () => {
           </div>
         </div>
 
-        {/* ПРАВАЯ ПАНЕЛЬ: ЛИДЕРЫ */}
+        {/* ТОПЫ */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
           
           <div style={{ background: 'white', padding: '30px', border: sharpBorder }}>
