@@ -1,8 +1,8 @@
 import productionData from '../data/production_data.json';
 import { useState, useMemo, useEffect } from "react";
-import { TrendingUp, Banknote, Factory, Trophy, ClipboardList, AlertCircle, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { TrendingUp, Banknote, Factory, ArrowUpRight, ArrowDownRight, List, PieChart, Activity } from "lucide-react";
 
-// Функция очистки данных
+// Утилита очистки числовых значений для корректных расчетов
 const cleanVal = (v: any) => {
   if (typeof v === 'number') return v;
   if (!v || String(v).trim() === "") return 0;
@@ -11,7 +11,7 @@ const cleanVal = (v: any) => {
   return isNaN(num) ? 0 : num;
 };
 
-// Парсинг месяца
+// Парсинг даты из разных форматов (строка или объект Date)
 const parseMonth = (m: any) => {
   const s = String(m || "");
   let d = new Date();
@@ -29,36 +29,33 @@ const parseMonth = (m: any) => {
   };
 };
 
-const Index = () => {
-  // 1. Сохранение выбора месяца (localStorage)
+const App = () => {
+  // Сохранение выбранного месяца в памяти браузера (уникальный ключ для ПЛ ГРУПП)
   const [selectedMonth, setSelectedMonth] = useState<string | null>(() => {
-    return localStorage.getItem('kedress_last_month') || "Март";
+    return localStorage.getItem('pl_group_dashboard_state_v1') || "Март";
   });
 
   const [lastUpdate] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
 
   useEffect(() => {
     if (selectedMonth) {
-      localStorage.setItem('kedress_last_month', selectedMonth);
+      localStorage.setItem('pl_group_dashboard_state_v1', selectedMonth);
     } else {
-      localStorage.removeItem('kedress_last_month');
+      localStorage.removeItem('pl_group_dashboard_state_v1');
     }
   }, [selectedMonth]);
 
-  // 2. Подготовка данных
+  // Маппинг данных из JSON (только необходимые поля для ПЛ ГРУПП)
   const allData = useMemo(() => {
     if (!Array.isArray(productionData)) return [];
     return productionData.map((r) => {
       const dInfo = parseMonth(r["Месяц"]);
-      // Ищем брак в рублях (колонка AC) по разным ключам
-      const defectRubValue = r["Брак, руб."] || r["Брак руб."] || r["Брак руб"] || r["Брак, руб"] || 0;
-
       return {
-        monthName: dInfo.name, year: dInfo.year, monthIdx: dInfo.monthIdx,
+        monthName: dInfo.name, 
+        year: dInfo.year, 
+        monthIdx: dInfo.monthIdx,
         produced: cleanVal(r["Произведено"]), 
         revenue: cleanVal(r["Выручка"]),
-        defQty: cleanVal(r["Брак, шт"]), 
-        defRub: cleanVal(defectRubValue), 
         topRev: [
           { n: r["Товар 1"], v: cleanVal(r["Выручка 1"]) },
           { n: r["Товар 2"], v: cleanVal(r["Выручка 2"]) },
@@ -77,13 +74,13 @@ const Index = () => {
   const data2025 = allData.filter(r => r.year === 2025);
   const monthsList = Array.from(new Set(data2026.map(r => r.monthName)));
 
-  // 3. Итоги 2026 (всегда за год)
+  // Расчет итогов за год
   const yearly = useMemo(() => {
     const sum = (k: any) => data2026.reduce((s, r) => s + (r[k] || 0), 0);
-    return { rev: sum('revenue'), prod: sum('produced'), defQ: sum('defQty'), defR: sum('defRub') };
+    return { rev: sum('revenue'), prod: sum('produced') };
   }, [data2026]);
 
-  // 4. Данные выбранного периода
+  // Расчет показателей за выбранный период
   const m = useMemo(() => {
     const isAll = !selectedMonth;
     const currentSet = isAll ? data2026 : data2026.filter(r => r.monthName === selectedMonth);
@@ -91,21 +88,20 @@ const Index = () => {
     
     const res = {
       rev: sum(currentSet, 'revenue'), prod: sum(currentSet, 'produced'),
-      defQ: sum(currentSet, 'defQty'), defR: sum(currentSet, 'defRub'),
-      diffRev: 0, diffProd: 0, diffDefQ: 0, diffDefR: 0
+      diffRev: 0, diffProd: 0
     };
 
+    // Сравнение с прошлым годом (2025)
     if (!isAll && currentSet.length > 0) {
       const prev = data2025.find(r => r.monthIdx === currentSet[0].monthIdx);
       if (prev) {
         const getDiff = (c: number, p: number) => p > 0 ? ((c - p) / p) * 100 : 0;
         res.diffRev = getDiff(res.rev, prev.revenue);
         res.diffProd = getDiff(res.prod, prev.produced);
-        res.diffDefQ = getDiff(res.defQ, prev.defQty);
-        res.diffDefR = getDiff(res.defR, prev.defRub);
       }
     }
 
+    // Агрегация лидеров (топы)
     const aggregate = (type: 'topRev' | 'topQty') => {
       const map: Record<string, number> = {};
       currentSet.forEach(r => (r[type] as any[]).forEach(t => map[t.n] = (map[t.n] || 0) + t.v));
@@ -115,103 +111,112 @@ const Index = () => {
     return { ...res, topsRev: aggregate('topRev'), topsQty: aggregate('topQty') };
   }, [selectedMonth, data2026, data2025]);
 
+  // Форматирование чисел и валюты
   const fN = (n: number) => new Intl.NumberFormat("ru-RU").format(Math.round(n));
   const fR = (n: number) => n >= 1000000 ? (n/1000000).toFixed(2) + " млн ₽" : fN(n) + " ₽";
 
-  // Логика процента брака
-  const defectPercent = m.prod > 0 ? (m.defQ / m.prod) * 100 : 0;
-  const getDefectColor = (p: number) => {
-    if (p >= 10) return "#ef4444"; 
-    if (p >= 7) return "#f59e0b"; 
-    return "#10b981"; 
-  };
+  // Стилизация ПЛ ГРУПП: Синий основной, четкие рамки
+  const bluePrimary = '#1e3a8a'; 
+  const sharpBorder = `2px solid ${bluePrimary}`;
 
   return (
-    <div style={{ padding: '30px', backgroundColor: '#fdfbf7', minHeight: '100vh', color: '#3e3118', fontFamily: 'sans-serif' }}>
+    <div style={{ padding: '30px', backgroundColor: '#ffffff', minHeight: '100vh', color: '#0f172a', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       
-      {/* ШАПКА */}
+      {/* ШАПКА ДАШБОРДА */}
       <div style={{ 
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', 
-        padding: '20px 30px', borderRadius: '16px', marginBottom: '25px', border: '1px solid #f1e5d1',
-        boxShadow: '0 4px 6px rgba(0,0,0,0.02)'
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+        background: '#f8fafc', padding: '20px 30px', border: sharpBorder, marginBottom: '30px',
+        borderRadius: '0px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <img src="/logo.png" alt="Kedress" style={{ height: '45px' }} />
+          <div style={{ 
+            background: bluePrimary, color: 'white', padding: '12px 20px', 
+            fontWeight: '950', fontSize: '28px', border: '1px solid #000' 
+          }}>PL</div>
           <div>
-            <h1 style={{ fontSize: '22px', fontWeight: '900', margin: 0 }}>Производство Кедресс 2026</h1>
-            <div style={{ fontSize: '12px', color: '#a68c5b', fontWeight: 'bold' }}>ОБНОВЛЕНО: {lastUpdate}</div>
+            <h1 style={{ fontSize: '28px', fontWeight: '950', margin: 0, color: bluePrimary, textTransform: 'uppercase', letterSpacing: '2px' }}>
+              Производство ПЛ ГРУПП
+            </h1>
+            <div style={{ fontSize: '13px', color: '#3b82f6', fontWeight: '900', marginTop: '4px', letterSpacing: '1px' }}>
+              МОНИТОРИНГ ПОКАЗАТЕЛЕЙ 2026 | ОБНОВЛЕНО: {lastUpdate}
+            </div>
           </div>
         </div>
-        <select value={selectedMonth || ""} onChange={(e) => setSelectedMonth(e.target.value || null)} style={{ padding: '12px 20px', borderRadius: '12px', border: '2px solid #d1b47d', fontWeight: 'bold', background: 'white', cursor: 'pointer' }}>
-          <option value="">📅 Весь 2026 год</option>
-          {monthsList.map((mon, i) => <option key={i} value={mon}>{mon}</option>)}
+        
+        <select 
+          value={selectedMonth || ""} 
+          onChange={(e) => setSelectedMonth(e.target.value || null)} 
+          style={{ 
+            padding: '12px 24px', border: sharpBorder, fontWeight: '900', 
+            cursor: 'pointer', background: 'white', color: bluePrimary,
+            textTransform: 'uppercase', outline: 'none', borderRadius: '0px'
+          }}
+        >
+          <option value="">📅 ВЕСЬ 2026 ГОД</option>
+          {monthsList.map((mon, i) => <option key={i} value={mon}>{mon.toUpperCase()}</option>)}
         </select>
       </div>
 
-      {/* ИТОГИ ГОДА */}
-      <div style={{ background: '#3e3118', padding: '20px', borderRadius: '20px', color: '#d1b47d', marginBottom: '25px' }}>
-        <h3 style={{ fontSize: '11px', fontWeight: '900', marginBottom: '15px', opacity: 0.7, textTransform: 'uppercase' }}>Итоги 2026 года (весь период)</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
-          <div><div style={{ fontSize: '10px' }}>ВЫПУСК ГОД</div><div style={{ fontSize: '20px', fontWeight: '900', color: 'white' }}>{fN(yearly.prod)} шт</div></div>
-          <div><div style={{ fontSize: '10px' }}>ВЫРУЧКА ГОД</div><div style={{ fontSize: '20px', fontWeight: '900', color: 'white' }}>{fR(yearly.rev)}</div></div>
-          <div><div style={{ fontSize: '10px' }}>БРАК ГОД (ШТ)</div><div style={{ fontSize: '20px', fontWeight: '900', color: '#ef4444' }}>{fN(yearly.defQ)} шт</div></div>
-          <div><div style={{ fontSize: '10px' }}>БРАК ГОД (РУБ)</div><div style={{ fontSize: '20px', fontWeight: '900', color: '#ef4444' }}>{fR(yearly.defR)}</div></div>
+      {/* ГОДОВЫЕ ИТОГИ */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '30px' }}>
+        <div style={{ background: '#f0f9ff', border: sharpBorder, padding: '30px', textAlign: 'center' }}>
+          <div style={{ fontSize: '15px', fontWeight: '900', color: bluePrimary, marginBottom: '10px', textTransform: 'uppercase' }}>Валовый выпуск 2026</div>
+          <div style={{ fontSize: '54px', fontWeight: '950', color: bluePrimary }}>{fN(yearly.prod)} <span style={{fontSize: '22px'}}>ШТ.</span></div>
+        </div>
+        <div style={{ background: '#f0f9ff', border: sharpBorder, padding: '30px', textAlign: 'center' }}>
+          <div style={{ fontSize: '15px', fontWeight: '900', color: bluePrimary, marginBottom: '10px', textTransform: 'uppercase' }}>Валовая выручка 2026</div>
+          <div style={{ fontSize: '54px', fontWeight: '950', color: bluePrimary }}>{fR(yearly.rev)}</div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr', gap: '25px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr', gap: '30px' }}>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
           
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
+          {/* ОСНОВНЫЕ КАРТОЧКИ KPI */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
             {[
-              { t: 'ВЫПУСК', v: fN(m.prod) + ' шт', d: m.diffProd, i: <Factory size={16}/> },
-              { t: 'ВЫРУЧКА', v: fR(m.rev), d: m.diffRev, i: <Banknote size={16}/> },
-              { 
-                t: 'БРАК (ШТ)', 
-                v: fN(m.defQ) + ' шт', 
-                d: m.diffDefQ, 
-                i: <AlertCircle size={16}/>,
-                extra: (
-                  <div style={{ fontSize: '11px', fontWeight: '800', color: getDefectColor(defectPercent), marginTop: '2px' }}>
-                    {defectPercent.toFixed(1)}% от выпуска
-                  </div>
-                )
-              },
-              { t: 'БРАК (РУБ)', v: fR(m.defR), d: m.diffDefR, i: <TrendingUp size={16}/> }
+              { t: 'ВЫПУСК (ТЕКУЩИЙ ПЕРИОД)', v: fN(m.prod) + ' ШТ', d: m.diffProd, i: <Factory size={28}/> },
+              { t: 'ВЫРУЧКА (ТЕКУЩИЙ ПЕРИОД)', v: fR(m.rev), d: m.diffRev, i: <Banknote size={28}/> }
             ].map((card, i) => (
-              <div key={i} style={{ background: 'white', padding: '15px', borderRadius: '16px', border: '1px solid #f1e5d1' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#a68c5b', fontSize: '10px', fontWeight: '800', marginBottom: '8px' }}>{card.i} {card.t}</div>
-                <div style={{ fontSize: '18px', fontWeight: '900' }}>{card.v}</div>
-                {card.extra}
+              <div key={i} style={{ background: 'white', padding: '35px', border: sharpBorder }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#64748b', fontSize: '13px', fontWeight: '950', marginBottom: '20px', textTransform: 'uppercase' }}>
+                  {card.i} {card.t}
+                </div>
+                <div style={{ fontSize: '40px', fontWeight: '950', color: bluePrimary, marginBottom: '15px' }}>{card.v}</div>
                 {selectedMonth && card.d !== 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', fontSize: '10px', fontWeight: 'bold', color: card.d >= 0 ? '#10b981' : '#ef4444', marginTop: '4px' }}>
-                    {card.d >= 0 ? <ArrowUpRight size={12}/> : <ArrowDownRight size={12}/>} {Math.abs(card.d).toFixed(1)}% <span style={{opacity: 0.6, marginLeft: '3px', fontWeight: 'normal'}}>к 2025</span>
+                  <div style={{ display: 'flex', alignItems: 'center', fontSize: '16px', fontWeight: '950', color: card.d >= 0 ? '#059669' : '#dc2626' }}>
+                    {card.d >= 0 ? <ArrowUpRight size={22}/> : <ArrowDownRight size={22}/>} 
+                    {Math.abs(card.d).toFixed(1)}% <span style={{color: '#94a3b8', marginLeft: '8px', fontWeight: '800', fontSize: '13px'}}>К ПРОШЛОМУ ГОДУ</span>
                   </div>
                 )}
               </div>
             ))}
           </div>
 
-          <div style={{ background: 'white', padding: '25px', borderRadius: '20px', border: '1px solid #f1e5d1' }}>
-            <h3 style={{ fontSize: '13px', fontWeight: '900', color: '#7c6a46', marginBottom: '15px' }}>ИСТОРИЯ ПРОИЗВОДСТВА 2026</h3>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+          {/* ТАБЛИЦА ДИНАМИКИ */}
+          <div style={{ background: 'white', padding: '0', border: sharpBorder, overflow: 'hidden' }}>
+            <div style={{ padding: '20px 30px', background: '#f8fafc', borderBottom: sharpBorder, display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Activity size={24} strokeWidth={3} color={bluePrimary} />
+              <h3 style={{ fontSize: '18px', fontWeight: '950', textTransform: 'uppercase', color: bluePrimary, margin: 0 }}>Реестр выполнения плана</h3>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '16px' }}>
               <thead>
-                <tr style={{ textAlign: 'left', color: '#a68c5b', borderBottom: '2px solid #f8f1e5' }}>
-                  <th style={{ padding: '10px' }}>МЕСЯЦ</th>
-                  <th style={{ textAlign: 'right' }}>ВЫРУЧКА</th>
-                  <th style={{ textAlign: 'right' }}>ВЫПУСК (ШТ)</th>
-                  <th style={{ textAlign: 'right' }}>БРАК (ШТ)</th>
-                  <th style={{ textAlign: 'right' }}>БРАК (РУБ)</th>
+                <tr style={{ textAlign: 'left', color: 'white', background: bluePrimary }}>
+                  <th style={{ padding: '20px 30px' }}>ОТЧЕТНЫЙ МЕСЯЦ</th>
+                  <th style={{ textAlign: 'right', padding: '20px 30px' }}>ВЫРУЧКА, РУБ.</th>
+                  <th style={{ textAlign: 'right', padding: '20px 30px' }}>ВЫПУСК, ШТ.</th>
                 </tr>
               </thead>
               <tbody>
                 {data2026.map((r, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid #fcfaf7', backgroundColor: r.monthName === selectedMonth ? '#fffdf0' : 'transparent' }}>
-                    <td style={{ padding: '10px', fontWeight: '700' }}>{r.monthName}</td>
-                    <td style={{ textAlign: 'right', fontWeight: '800' }}>{fR(r.revenue)}</td>
-                    <td style={{ textAlign: 'right' }}>{fN(r.produced)}</td>
-                    <td style={{ textAlign: 'right', color: '#ef4444' }}>{fN(r.defQty)}</td>
-                    <td style={{ textAlign: 'right', color: '#ef4444' }}>{fR(r.defRub)}</td>
+                  <tr key={i} style={{ 
+                    borderBottom: '2px solid #f1f5f9', 
+                    backgroundColor: r.monthName === selectedMonth ? '#e0f2fe' : 'transparent'
+                  }}>
+                    <td style={{ padding: '20px 30px', fontWeight: '900', color: '#334155' }}>{r.monthName.toUpperCase()}</td>
+                    <td style={{ textAlign: 'right', padding: '20px 30px', fontWeight: '950', color: bluePrimary }}>{fR(r.revenue)}</td>
+                    <td style={{ textAlign: 'right', padding: '20px 30px', fontWeight: '800', color: '#475569' }}>{fN(r.produced)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -219,29 +224,40 @@ const Index = () => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid #f1e5d1' }}>
-            <h3 style={{ fontSize: '13px', fontWeight: '900', marginBottom: '15px', color: '#d1b47d' }}>ТОП-3 ВЫРУЧКА</h3>
-            {m.topsRev.map((it, i) => (
-              <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #fcfaf7' }}>
-                <div style={{ fontSize: '11px', fontWeight: '600' }}>{it.n}</div>
-                <div style={{ fontSize: '13px', fontWeight: '800', color: '#d1b47d' }}>{fR(it.v)}</div>
+        {/* ПРАВАЯ ПАНЕЛЬ: ЛИДЕРЫ */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+          
+          <div style={{ background: 'white', padding: '30px', border: sharpBorder }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '25px', color: bluePrimary }}>
+              <TrendingUp size={26} strokeWidth={3} />
+              <h3 style={{ fontSize: '16px', fontWeight: '950', textTransform: 'uppercase', margin: 0 }}>Топ по выручке</h3>
+            </div>
+            {m.topsRev.length > 0 ? m.topsRev.map((it, i) => (
+              <div key={i} style={{ padding: '20px 0', borderBottom: '2px solid #f1f5f9' }}>
+                <div style={{ fontSize: '13px', fontWeight: '900', color: '#64748b', marginBottom: '8px', textTransform: 'uppercase' }}>{it.n}</div>
+                <div style={{ fontSize: '20px', fontWeight: '950', color: bluePrimary }}>{fR(it.v)}</div>
               </div>
-            ))}
+            )) : <div style={{padding: '20px 0', color: '#94a3b8', fontSize: '13px'}}>НЕТ ДАННЫХ</div>}
           </div>
-          <div style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid #f1e5d1' }}>
-            <h3 style={{ fontSize: '13px', fontWeight: '900', marginBottom: '15px', color: '#a68c5b' }}>ТОП-3 ВЫПУСК</h3>
-            {m.topsQty.map((it, i) => (
-              <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #fcfaf7' }}>
-                <div style={{ fontSize: '11px', fontWeight: '600' }}>{it.n}</div>
-                <div style={{ fontSize: '12px', fontWeight: '800', color: '#a68c5b' }}>{fN(it.v)} шт</div>
+
+          <div style={{ background: 'white', padding: '30px', border: sharpBorder }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '25px', color: bluePrimary }}>
+              <PieChart size={26} strokeWidth={3} />
+              <h3 style={{ fontSize: '16px', fontWeight: '950', textTransform: 'uppercase', margin: 0 }}>Топ по выпуску</h3>
+            </div>
+            {m.topsQty.length > 0 ? m.topsQty.map((it, i) => (
+              <div key={i} style={{ padding: '20px 0', borderBottom: '2px solid #f1f5f9' }}>
+                <div style={{ fontSize: '13px', fontWeight: '900', color: '#64748b', marginBottom: '8px', textTransform: 'uppercase' }}>{it.n}</div>
+                <div style={{ fontSize: '20px', fontWeight: '950', color: bluePrimary }}>{fN(it.v)} ШТ.</div>
               </div>
-            ))}
+            )) : <div style={{padding: '20px 0', color: '#94a3b8', fontSize: '13px'}}>НЕТ ДАННЫХ</div>}
           </div>
+
         </div>
+
       </div>
     </div>
   );
 };
 
-export default Index;
+export default App;
