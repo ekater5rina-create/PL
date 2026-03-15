@@ -1,0 +1,269 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN SYSTEM — Paper Bag Production Dashboard
+   Palette: Soft Beige background, White cards, Muted Gold accents
+   Text: Deep Anthracite
+   ═══════════════════════════════════════════════════════════════ */
+
+@layer base {
+  :root {
+    /* Core surfaces */
+    --background: 38 30% 94%;          /* Soft Beige */
+    --foreground: 220 15% 18%;         /* Deep Anthracite */
+
+    --card: 0 0% 100%;                 /* White card */
+    --card-foreground: 220 15% 18%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 18%;
+
+    /* Brand: Muted Gold */
+    --primary: 42 68% 52%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 38 20% 88%;
+    --secondary-foreground: 220 15% 18%;
+
+    --muted: 38 15% 88%;
+    --muted-foreground: 220 10% 48%;
+
+    --accent: 42 68% 52%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 42 25% 82%;              /* Gold-tinted border */
+    --input: 42 25% 82%;
+    --ring: 42 68% 52%;
+
+    --radius: 1rem;                    /* rounded-2xl everywhere */
+
+    /* Custom tokens */
+    --gold: 42 68% 46%;               /* Muted Gold */
+    --gold-light: 42 55% 88%;         /* Gold tint for bg */
+    --gold-border: 42 45% 74%;        /* Card border */
+    --shadow-card: 0 2px 16px 0 hsl(220 15% 18% / 0.07);
+    --shadow-card-hover: 0 6px 28px 0 hsl(220 15% 18% / 0.11);
+
+    --sidebar-background: 38 28% 91%;
+    --sidebar-foreground: 220 15% 18%;
+    --sidebar-primary: 42 68% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 38 20% 85%;
+    --sidebar-accent-foreground: 220 15% 18%;
+    --sidebar-border: 42 25% 80%;
+    --sidebar-ring: 42 68% 52%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground; font-family: 'Inter', system-ui, sans-serif; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DASHBOARD LAYOUT
+   ═══════════════════════════════════════════════════════════ */
+@layer components {
+  .dashboard-root {
+    @apply min-h-screen flex flex-col;
+    background: hsl(var(--background));
+  }
+
+  .dashboard-header {
+    @apply flex flex-wrap items-center justify-between gap-4 px-6 py-5 border-b;
+    background: hsl(var(--card));
+    border-color: hsl(var(--gold-border));
+    box-shadow: var(--shadow-card);
+  }
+
+  .header-icon {
+    @apply flex items-center justify-center w-10 h-10 rounded-xl;
+    background: hsl(var(--gold-light));
+    color: hsl(var(--gold));
+  }
+
+  .dashboard-title {
+    @apply text-lg font-bold tracking-tight;
+    color: hsl(var(--foreground));
+  }
+
+  .dashboard-subtitle {
+    @apply text-xs mt-0.5;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .dashboard-content {
+    @apply flex-1 flex flex-col gap-8 px-6 py-7 max-w-screen-xl mx-auto w-full;
+  }
+
+  .dashboard-footer {
+    @apply text-center text-xs py-4 border-t;
+    color: hsl(var(--muted-foreground));
+    border-color: hsl(var(--gold-border));
+  }
+
+  /* ── Section title ── */
+  .section-title {
+    @apply text-sm font-semibold uppercase tracking-widest mb-4;
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* ── KPI grid ── */
+  .kpi-grid {
+    @apply grid gap-4 grid-cols-1 sm:grid-cols-3;
+  }
+
+  .kpi-grid--4 {
+    @apply sm:grid-cols-4;
+  }
+
+  /* ── KPI card ── */
+  .kpi-card {
+    @apply rounded-2xl p-5 flex flex-col gap-1.5;
+    background: hsl(var(--card));
+    border: 1.5px solid hsl(var(--gold-border));
+    box-shadow: var(--shadow-card);
+    transition: box-shadow 0.2s ease;
+  }
+
+  .kpi-card:hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  .kpi-card--highlight {
+    background: linear-gradient(135deg, hsl(var(--gold-light)), hsl(var(--card)));
+    border-color: hsl(var(--gold));
+  }
+
+  .kpi-card__icon-wrapper {
+    @apply w-8 h-8 flex items-center justify-center rounded-lg mb-1;
+    background: hsl(var(--gold-light));
+    color: hsl(var(--gold));
+  }
+
+  .kpi-card__title {
+    @apply text-xs font-medium uppercase tracking-wide;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .kpi-card__value {
+    @apply text-2xl font-bold leading-tight;
+    color: hsl(var(--foreground));
+  }
+
+  .kpi-card__subtitle {
+    @apply text-xs;
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* ── Month selector ── */
+  .month-select-wrapper {
+    @apply flex flex-col gap-1;
+  }
+
+  .month-select-label {
+    @apply text-xs font-medium;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .month-select {
+    @apply rounded-xl px-4 py-2 text-sm font-medium outline-none cursor-pointer;
+    background: hsl(var(--card));
+    border: 1.5px solid hsl(var(--gold-border));
+    color: hsl(var(--foreground));
+    min-width: 180px;
+    transition: border-color 0.15s;
+  }
+
+  .month-select:focus {
+    border-color: hsl(var(--gold));
+    box-shadow: 0 0 0 3px hsl(var(--gold) / 0.15);
+  }
+
+  /* ── Bottom grid ── */
+  .bottom-grid {
+    @apply grid gap-6;
+    grid-template-columns: 1fr;
+  }
+
+  @media (min-width: 900px) {
+    .bottom-grid {
+      grid-template-columns: 1fr 360px;
+    }
+  }
+
+  /* ── Table ── */
+  .table-section {
+    @apply min-w-0;
+  }
+
+  .table-wrapper {
+    @apply rounded-2xl overflow-hidden;
+    border: 1.5px solid hsl(var(--gold-border));
+    box-shadow: var(--shadow-card);
+  }
+
+  .data-table {
+    @apply w-full text-sm;
+    background: hsl(var(--card));
+  }
+
+  .data-table thead {
+    background: hsl(var(--gold-light));
+  }
+
+  .data-table thead th {
+    @apply px-4 py-3 font-semibold text-xs uppercase tracking-wider;
+    color: hsl(var(--gold));
+  }
+
+  .data-table tbody tr {
+    border-top: 1px solid hsl(var(--border));
+    transition: background 0.12s;
+  }
+
+  .data-table tbody tr:hover {
+    background: hsl(var(--gold-light) / 0.5);
+  }
+
+  .data-table tbody td {
+    @apply px-4 py-3;
+    color: hsl(var(--foreground));
+  }
+
+  /* ── Margin badge ── */
+  .margin-badge {
+    @apply inline-block px-2 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  .margin-badge--high {
+    background: hsl(142 60% 88%);
+    color: hsl(142 50% 28%);
+  }
+
+  .margin-badge--low {
+    background: hsl(38 60% 88%);
+    color: hsl(38 60% 35%);
+  }
+
+  /* ── TOP-3 bar ── */
+  .top-bar-bg {
+    @apply h-1.5 w-full rounded-full overflow-hidden;
+    background: hsl(var(--gold-light));
+  }
+
+  .top-bar-fill {
+    @apply h-full rounded-full transition-all duration-500;
+    background: hsl(var(--gold));
+  }
+
+  /* ── TOPS section ── */
+  .tops-section {
+    @apply min-w-0;
+  }
+}
