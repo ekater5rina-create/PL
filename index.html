@@ -1,26 +1,237 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- TODO: Set the document title to the name of your application -->
-    <title>Lovable App</title>
-    <meta name="description" content="Lovable Generated Project" />
-    <meta name="author" content="Lovable" />
+import productionData from '../data/production_data.json';
+import { useState, useMemo, useEffect } from "react";
+import { TrendingUp, Banknote, Factory, Trophy, ClipboardList, AlertCircle, ArrowUpRight, ArrowDownRight } from "lucide-react";
 
-    <!-- TODO: Update og:title to match your application name -->
-    <meta property="og:title" content="Lovable App" />
-    <meta property="og:description" content="Lovable Generated Project" />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+const cleanVal = (v: any) => {
+  if (typeof v === 'number') return v;
+  if (!v || String(v).trim() === "") return 0;
+  const raw = String(v).replace(/[^0-9.,-]/g, '').replace(',', '.');
+  let num = parseFloat(raw);
+  return isNaN(num) ? 0 : num;
+};
 
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@Lovable" />
-    <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
-  </head>
+const parseMonth = (m: any) => {
+  const s = String(m || "");
+  let d = new Date();
+  if (s.includes('.') && s.split('.').length === 3) {
+    const p = s.split('.');
+    d = new Date(parseInt(p[2]), parseInt(p[1]) - 1, parseInt(p[0]));
+  } else if (s.includes('T') || !isNaN(Date.parse(s))) {
+    d = new Date(s);
+    if (d.getUTCHours() > 18) d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return {
+    name: d.toLocaleString('ru-RU', { month: 'long' }).replace(/^\w/, c => c.toUpperCase()),
+    year: d.getFullYear(),
+    monthIdx: d.getMonth()
+  };
+};
 
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+const Index = () => {
+  // Уникальный ключ для localStorage, чтобы не путать с Kedress
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(() => {
+    return localStorage.getItem('pl_group_last_month') || "Март";
+  });
+
+  const [lastUpdate] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+
+  useEffect(() => {
+    if (selectedMonth) {
+      localStorage.setItem('pl_group_last_month', selectedMonth);
+    } else {
+      localStorage.removeItem('pl_group_last_month');
+    }
+  }, [selectedMonth]);
+
+  const allData = useMemo(() => {
+    if (!Array.isArray(productionData)) return [];
+    return productionData.map((r) => {
+      const dInfo = parseMonth(r["Месяц"]);
+      // Сумма брака (колонка AC) - если ее нет в JSON, будет 0
+      const defectRubValue = r["Брак, руб."] || r["Брак руб."] || r["Брак руб"] || r["Брак, руб"] || 0;
+
+      return {
+        monthName: dInfo.name, year: dInfo.year, monthIdx: dInfo.monthIdx,
+        produced: cleanVal(r["Произведено"]), 
+        revenue: cleanVal(r["Выручка"]),
+        defQty: cleanVal(r["Брак, шт"]), 
+        defRub: cleanVal(defectRubValue), 
+        topRev: [
+          { n: r["Товар 1"], v: cleanVal(r["Выручка 1"]) },
+          { n: r["Товар 2"], v: cleanVal(r["Выручка 2"]) },
+          { n: r["Товар 3"], v: cleanVal(r["Выручка 3"]) }
+        ].filter(x => x.n && x.v > 0),
+        topQty: [
+          { n: r["Лидер выпуска 1"], v: cleanVal(r["Кол-во 1"]) },
+          { n: r["Лидер выпуска 2"], v: cleanVal(r["Кол-во 2"]) },
+          { n: r["Лидер выпуска 3"], v: cleanVal(r["Кол-во 3"]) }
+        ].filter(x => x.n && x.v > 0)
+      };
+    });
+  }, []);
+
+  const data2026 = allData.filter(r => r.year === 2026);
+  const data2025 = allData.filter(r => r.year === 2025);
+  const monthsList = Array.from(new Set(data2026.map(r => r.monthName)));
+
+  const yearly = useMemo(() => {
+    const sum = (k: any) => data2026.reduce((s, r) => s + (r[k] || 0), 0);
+    return { rev: sum('revenue'), prod: sum('produced'), defQ: sum('defQty'), defR: sum('defRub') };
+  }, [data2026]);
+
+  const m = useMemo(() => {
+    const isAll = !selectedMonth;
+    const currentSet = isAll ? data2026 : data2026.filter(r => r.monthName === selectedMonth);
+    const sum = (set: any[], k: any) => set.reduce((s, r) => s + (r[k] || 0), 0);
+    
+    const res = {
+      rev: sum(currentSet, 'revenue'), prod: sum(currentSet, 'produced'),
+      defQ: sum(currentSet, 'defQty'), defR: sum(currentSet, 'defRub'),
+      diffRev: 0, diffProd: 0, diffDefQ: 0, diffDefR: 0
+    };
+
+    if (!isAll && currentSet.length > 0) {
+      const prev = data2025.find(r => r.monthIdx === currentSet[0].monthIdx);
+      if (prev) {
+        const getDiff = (c: number, p: number) => p > 0 ? ((c - p) / p) * 100 : 0;
+        res.diffRev = getDiff(res.rev, prev.revenue);
+        res.diffProd = getDiff(res.prod, prev.produced);
+        res.diffDefQ = getDiff(res.defQ, prev.defQty);
+        res.diffDefR = getDiff(res.defR, prev.defRub);
+      }
+    }
+
+    const aggregate = (type: 'topRev' | 'topQty') => {
+      const map: Record<string, number> = {};
+      currentSet.forEach(r => (r[type] as any[]).forEach(t => map[t.n] = (map[t.n] || 0) + t.v));
+      return Object.entries(map).map(([n, v]) => ({ n, v })).sort((a, b) => b.v - a.v).slice(0, 3);
+    };
+
+    return { ...res, topsRev: aggregate('topRev'), topsQty: aggregate('topQty') };
+  }, [selectedMonth, data2026, data2025]);
+
+  const fN = (n: number) => new Intl.NumberFormat("ru-RU").format(Math.round(n));
+  const fR = (n: number) => n >= 1000000 ? (n/1000000).toFixed(2) + " млн ₽" : fN(n) + " ₽";
+
+  const defectPercent = m.prod > 0 ? (m.defQ / m.prod) * 100 : 0;
+  const getDefectColor = (p: number) => {
+    if (p >= 10) return "#ef4444"; 
+    if (p >= 7) return "#f59e0b"; 
+    return "#10b981"; 
+  };
+
+  return (
+    <div style={{ padding: '30px', backgroundColor: '#fdfbf7', minHeight: '100vh', color: '#3e3118', fontFamily: 'sans-serif' }}>
+      
+      {/* ШАПКА PL ГРУПП */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '20px 30px', borderRadius: '16px', marginBottom: '25px', border: '1px solid #f1e5d1', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ background: '#3e3118', color: 'white', padding: '10px 15px', borderRadius: '8px', fontWeight: '900', fontSize: '20px' }}>PL</div>
+          <div>
+            <h1 style={{ fontSize: '22px', fontWeight: '900', margin: 0, color: '#3e3118' }}>Производство PL Групп 2026</h1>
+            <div style={{ fontSize: '12px', color: '#a68c5b', fontWeight: 'bold' }}>ОБНОВЛЕНО: {lastUpdate}</div>
+          </div>
+        </div>
+        <select value={selectedMonth || ""} onChange={(e) => setSelectedMonth(e.target.value || null)} style={{ padding: '12px 20px', borderRadius: '12px', border: '2px solid #d1b47d', fontWeight: 'bold', background: 'white', cursor: 'pointer' }}>
+          <option value="">📅 Весь 2026 год</option>
+          {monthsList.map((mon, i) => <option key={i} value={mon}>{mon}</option>)}
+        </select>
+      </div>
+
+      {/* ИТОГИ ГОДА */}
+      <div style={{ background: '#3e3118', padding: '20px', borderRadius: '20px', color: '#d1b47d', marginBottom: '25px' }}>
+        <h3 style={{ fontSize: '11px', fontWeight: '900', marginBottom: '15px', opacity: 0.7, textTransform: 'uppercase' }}>Итоги 2026 года (весь период)</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
+          <div><div style={{ fontSize: '10px' }}>ВЫПУСК ГОД</div><div style={{ fontSize: '20px', fontWeight: '900', color: 'white' }}>{fN(yearly.prod)} шт</div></div>
+          <div><div style={{ fontSize: '10px' }}>ВЫРУЧКА ГОД</div><div style={{ fontSize: '20px', fontWeight: '900', color: 'white' }}>{fR(yearly.rev)}</div></div>
+          <div><div style={{ fontSize: '10px' }}>БРАК ГОД (ШТ)</div><div style={{ fontSize: '20px', fontWeight: '900', color: '#ef4444' }}>{fN(yearly.defQ)} шт</div></div>
+          <div><div style={{ fontSize: '10px' }}>БРАК ГОД (РУБ)</div><div style={{ fontSize: '20px', fontWeight: '900', color: '#ef4444' }}>{fR(yearly.defR)}</div></div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr', gap: '25px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
+            {[
+              { t: 'ВЫПУСК', v: fN(m.prod) + ' шт', d: m.diffProd, i: <Factory size={16}/> },
+              { t: 'ВЫРУЧКА', v: fR(m.rev), d: m.diffRev, i: <Banknote size={16}/> },
+              { 
+                t: 'БРАК (ШТ)', 
+                v: fN(m.defQ) + ' шт', 
+                d: m.diffDefQ, 
+                i: <AlertCircle size={16}/>,
+                extra: m.defQ > 0 ? (
+                  <div style={{ fontSize: '11px', fontWeight: '800', color: getDefectColor(defectPercent), marginTop: '2px' }}>
+                    {defectPercent.toFixed(1)}% от выпуска
+                  </div>
+                ) : null
+              },
+              { t: 'БРАК (РУБ)', v: fR(m.defR), d: m.diffDefR, i: <TrendingUp size={16}/> }
+            ].map((card, i) => (
+              <div key={i} style={{ background: 'white', padding: '15px', borderRadius: '16px', border: '1px solid #f1e5d1' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#a68c5b', fontSize: '10px', fontWeight: '800', marginBottom: '8px' }}>{card.i} {card.t}</div>
+                <div style={{ fontSize: '18px', fontWeight: '900' }}>{card.v}</div>
+                {card.extra}
+                {selectedMonth && card.d !== 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', fontSize: '10px', fontWeight: 'bold', color: card.d >= 0 ? '#10b981' : '#ef4444', marginTop: '4px' }}>
+                    {card.d >= 0 ? <ArrowUpRight size={12}/> : <ArrowDownRight size={12}/>} {Math.abs(card.d).toFixed(1)}% <span style={{opacity: 0.6, marginLeft: '3px', fontWeight: 'normal'}}>к 2025</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ background: 'white', padding: '25px', borderRadius: '20px', border: '1px solid #f1e5d1' }}>
+            <h3 style={{ fontSize: '13px', fontWeight: '900', color: '#7c6a46', marginBottom: '15px' }}>ИСТОРИЯ ПРОИЗВОДСТВА 2026</h3>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: '#a68c5b', borderBottom: '2px solid #f8f1e5' }}>
+                  <th style={{ padding: '10px' }}>МЕСЯЦ</th>
+                  <th style={{ textAlign: 'right' }}>ВЫРУЧКА</th>
+                  <th style={{ textAlign: 'right' }}>ВЫПУСК (ШТ)</th>
+                  <th style={{ textAlign: 'right' }}>БРАК (ШТ)</th>
+                  <th style={{ textAlign: 'right' }}>БРАК (РУБ)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data2026.map((r, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #fcfaf7', backgroundColor: r.monthName === selectedMonth ? '#fffdf0' : 'transparent' }}>
+                    <td style={{ padding: '10px', fontWeight: '700' }}>{r.monthName}</td>
+                    <td style={{ textAlign: 'right', fontWeight: '800' }}>{fR(r.revenue)}</td>
+                    <td style={{ textAlign: 'right' }}>{fN(r.produced)}</td>
+                    <td style={{ textAlign: 'right', color: '#ef4444' }}>{fN(r.defQty)}</td>
+                    <td style={{ textAlign: 'right', color: '#ef4444' }}>{fR(r.defRub)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid #f1e5d1' }}>
+            <h3 style={{ fontSize: '13px', fontWeight: '900', marginBottom: '15px', color: '#d1b47d' }}>ТОП-3 ВЫРУЧКА</h3>
+            {m.topsRev.map((it, i) => (
+              <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #fcfaf7' }}>
+                <div style={{ fontSize: '11px', fontWeight: '600' }}>{it.n}</div>
+                <div style={{ fontSize: '13px', fontWeight: '800', color: '#d1b47d' }}>{fR(it.v)}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid #f1e5d1' }}>
+            <h3 style={{ fontSize: '13px', fontWeight: '900', marginBottom: '15px', color: '#a68c5b' }}>ТОП-3 ВЫПУСК</h3>
+            {m.topsQty.map((it, i) => (
+              <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #fcfaf7' }}>
+                <div style={{ fontSize: '11px', fontWeight: '600' }}>{it.n}</div>
+                <div style={{ fontSize: '12px', fontWeight: '800', color: '#a68c5b' }}>{fN(it.v)} шт</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Index;
